@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Resume Customizer — Frontend
 
-## Getting Started
+Next.js frontend for the AI Resume Customizer. Users sign up, upload a resume (or enter their details manually), paste a job description, and get a tailored resume, ATS check, change diff and cover letter, downloadable as PDF, DOCX or TXT.
 
-First, run the development server:
+Backend: FastAPI + MongoDB + Groq (separate repository).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Tech stack
+
+- **Next.js 16** (App Router, Turbopack) + **React 19** + **TypeScript**
+- **Tailwind CSS 4**, with light and dark mode
+- **react-hook-form** + **zod** for form validation
+- **libphonenumber-js** for phone validation with country codes
+- **jsdiff** (`diff`) for the word-level diff view
+
+## Features
+
+- **Auth:** signup and login with password rules; the session uses HttpOnly cookies with automatic token refresh
+- **Step 1, about you:** upload a PDF/DOCX resume (name and size shown) **or** fill in details manually (experience, projects, skills, education). The tab you choose is what the AI uses.
+- **Step 2, job description:** text area with validation (non-empty, minimum length)
+- **Step 3, AI customization:**
+  - Section-wise tailoring: choose Summary, Skills, Experience or Projects
+  - Job match score (before → after) and a rule-based **ATS score** with a checklist
+  - **Tailored resume** preview, plus downloads as PDF, DOCX or TXT
+  - **Changes:** highlighted diff against your original, or against another version
+  - **Improvements:** matched and missing keywords, suggestions, bullet changes
+  - **Versions:** every generation is saved, and you can switch between them
+  - **Cover letter:** streamed live as the AI writes it; copy or download it
+- Clear error messages for invalid files, large files, empty input and AI failures
+
+## Project structure
+
+```
+frontend/
+├── src/
+│   ├── app/                 # Pages: / (dashboard), /login, /signup
+│   ├── components/
+│   │   ├── dashboard/       # Profile, job description and customize steps, diff, ATS, cover letter…
+│   │   └── ui.tsx           # Shared buttons, inputs, alerts
+│   ├── lib/
+│   │   ├── api.ts           # Typed API client (cookie auth, token refresh, downloads, streaming)
+│   │   ├── useCustomization.ts
+│   │   └── validation.ts    # zod schemas
+│   └── proxy.ts             # Redirects signed-out visitors to /login
+├── next.config.ts           # Proxies /api/* to the backend
+└── .env.example
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it talks to the backend
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The browser only calls this Next.js app. `next.config.ts` rewrites `/api/*` to the FastAPI backend (`BACKEND_URL`). This keeps the auth cookies first-party and avoids CORS. The proxy timeout is raised to 180 s because AI customization can take 30 s or more.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup
 
-## Learn More
+Requires **Node.js 20+** and the backend running (default: `http://localhost:8000`).
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd frontend
+npm install
+cp .env.example .env.local   # optional locally; defaults to http://localhost:8000
+npm run dev -- -p 3001
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open http://localhost:3001.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Environment variables
 
-## Deploy on Vercel
+| Variable | Default | Description |
+|---|---|---|
+| `BACKEND_URL` | `http://localhost:8000` | URL of the FastAPI backend that `/api/*` is proxied to |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | Description |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` | Production build (includes the type check) |
+| `npm run start` | Serve the production build |
+| `npm run lint` | ESLint |
+
+## Deployment (Vercel)
+
+1. Import this repository in Vercel. The framework preset is Next.js and needs no build settings.
+2. Add the environment variable `BACKEND_URL` = your deployed backend URL (e.g. `https://your-backend.onrender.com`), without a trailing slash.
+3. Deploy. Then set the backend's `FRONTEND_URL` to your Vercel URL.
