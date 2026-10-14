@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch, type FieldErrors, type Path } from "react-hook-form";
 
 import { TagInput } from "@/components/dashboard/TagInput";
@@ -72,6 +72,16 @@ export function DetailsForm({ data, onSaved }: { data: Dashboard; onSaved: (d: D
   const level = useWatch({ control, name: "experience_level" });
   const currentFlags = useWatch({ control, name: "experiences" })?.map((e) => e.current) ?? [];
   const experienced = level === "experienced";
+  const fresher = level === "fresher";
+  const educationValues = useWatch({ control, name: "education" }) ?? [];
+  // Freshers fill in education first; the rest of the form unlocks once one entry is complete.
+  const hasEducation = educationValues.some((e) => e.degree?.trim() && e.institution?.trim());
+  const locked = fresher && !hasEducation;
+
+  // Choosing "Fresher" with no education yet: open an empty education entry to start with.
+  useEffect(() => {
+    if (fresher && education.fields.length === 0) education.append(emptyEducation(), { shouldFocus: false });
+  }, [fresher, education]);
 
   const onSubmit = async (values: Form) => {
     setFormError(null);
@@ -92,6 +102,43 @@ export function DetailsForm({ data, onSaved }: { data: Dashboard; onSaved: (d: D
       }
     }
   };
+
+  const educationSection = (
+    <section>
+      <SectionTitle
+        title={experienced ? "Education (optional)" : "Education (required first)"}
+        hint={experienced ? undefined : "Start here: add your degree and institution to unlock the rest of the form."}
+        error={arrayError(errors.education)}
+      />
+      <div className="space-y-3">
+        {education.fields.map((f, i) => {
+          const e = errors.education?.[i];
+          return (
+            <SubCard key={f.id} title={`Education ${i + 1}`} onRemove={() => education.remove(i)}>
+              <Field
+                label="Degree"
+                placeholder="e.g. B.Tech, Computer Science"
+                error={e?.degree?.message}
+                {...register(`education.${i}.degree`)}
+              />
+              <Field label="Institution" error={e?.institution?.message} {...register(`education.${i}.institution`)} />
+              <Field
+                label="Graduation year"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="e.g. 2024"
+                error={e?.year?.message}
+                {...register(`education.${i}.year`)}
+              />
+            </SubCard>
+          );
+        })}
+        <SecondaryButton onClick={() => education.append(emptyEducation())} disabled={education.fields.length >= 10}>
+          + Add education
+        </SecondaryButton>
+      </div>
+    </section>
+  );
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6">
@@ -128,169 +175,155 @@ export function DetailsForm({ data, onSaved }: { data: Dashboard; onSaved: (d: D
         )}
       </fieldset>
 
-      {/* Basics */}
-      <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
-        <Field
-          label="Headline"
-          placeholder="e.g. Full Stack Developer"
-          maxLength={120}
-          error={errors.headline?.message}
-          {...register("headline")}
-        />
-        {experienced && (
+      {/* Freshers: education is step one */}
+      {fresher && educationSection}
+
+      {locked && (
+        <Alert tone="info">
+          Add your education above (degree and institution) to continue with your skills, internships and projects.
+        </Alert>
+      )}
+
+      {/* Everything below is disabled for freshers until education is added */}
+      <fieldset disabled={locked} className={`space-y-6 ${locked ? "pointer-events-none opacity-50" : ""}`}>
+        {/* Basics */}
+        <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
           <Field
-            label="Total experience (years)"
-            type="number"
-            inputMode="decimal"
-            min={0.5}
-            max={50}
-            step={0.5}
-            placeholder="e.g. 2.5"
-            error={errors.years_experience?.message}
-            {...register("years_experience")}
+            label="Headline"
+            placeholder="e.g. Full Stack Developer"
+            maxLength={120}
+            error={errors.headline?.message}
+            {...register("headline")}
           />
-        )}
-      </div>
+          {experienced && (
+            <Field
+              label="Total experience (years)"
+              type="number"
+              inputMode="decimal"
+              min={0.5}
+              max={50}
+              step={0.5}
+              placeholder="e.g. 2.5"
+              error={errors.years_experience?.message}
+              {...register("years_experience")}
+            />
+          )}
+        </div>
 
-      <Controller
-        control={control}
-        name="skills"
-        render={({ field }) => (
-          <TagInput
-            label="Skills"
-            value={field.value}
-            onChange={field.onChange}
-            placeholder="Type a skill and press Enter, e.g. React"
-            hint="Add at least 3. Press Enter or comma after each skill."
-            error={arrayError(errors.skills)}
-          />
-        )}
-      />
-
-      {/* Work experience */}
-      <section>
-        <SectionTitle
-          title={experienced ? "Work experience" : "Internships / work experience (optional)"}
-          hint={experienced ? "Add at least one. Most recent first." : undefined}
-          error={arrayError(errors.experiences)}
+        <Controller
+          control={control}
+          name="skills"
+          render={({ field }) => (
+            <TagInput
+              label="Skills"
+              value={field.value}
+              onChange={field.onChange}
+              placeholder="Type a skill and press Enter, e.g. React"
+              hint="Add at least 3. Press Enter or comma after each skill."
+              error={arrayError(errors.skills)}
+            />
+          )}
         />
-        <div className="space-y-3">
-          {experiences.fields.map((f, i) => {
-            const e = errors.experiences?.[i];
-            const current = currentFlags[i];
-            return (
-              <SubCard key={f.id} title={`Experience ${i + 1}`} onRemove={() => experiences.remove(i)}>
-                <Field label="Company" error={e?.company?.message} {...register(`experiences.${i}.company`)} />
-                <Field label="Role" error={e?.role?.message} {...register(`experiences.${i}.role`)} />
-                <Field label="Start" type="month" error={e?.start?.message} {...register(`experiences.${i}.start`)} />
-                <div>
+
+        {/* Work experience */}
+        <section>
+          <SectionTitle
+            title={experienced ? "Work experience" : "Internships / work experience (optional)"}
+            hint={experienced ? "Add at least one. Most recent first." : undefined}
+            error={arrayError(errors.experiences)}
+          />
+          <div className="space-y-3">
+            {experiences.fields.map((f, i) => {
+              const e = errors.experiences?.[i];
+              const current = currentFlags[i];
+              return (
+                <SubCard key={f.id} title={`Experience ${i + 1}`} onRemove={() => experiences.remove(i)}>
+                  <Field label="Company" error={e?.company?.message} {...register(`experiences.${i}.company`)} />
+                  <Field label="Role" error={e?.role?.message} {...register(`experiences.${i}.role`)} />
+                  <Field label="Start" type="month" error={e?.start?.message} {...register(`experiences.${i}.start`)} />
+                  <div>
+                    <Field
+                      label="End"
+                      type="month"
+                      disabled={current}
+                      error={current ? undefined : e?.end?.message}
+                      {...register(`experiences.${i}.end`)}
+                    />
+                    <label className="mt-1.5 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                      <input type="checkbox" {...register(`experiences.${i}.current`)} /> I currently work here
+                    </label>
+                  </div>
+                  <Textarea
+                    label="What did you do?"
+                    rows={3}
+                    className="sm:col-span-2"
+                    placeholder="Key responsibilities and achievements"
+                    error={e?.description?.message}
+                    {...register(`experiences.${i}.description`)}
+                  />
+                </SubCard>
+              );
+            })}
+            <SecondaryButton
+              onClick={() => experiences.append(emptyExperience())}
+              disabled={experiences.fields.length >= 20}
+            >
+              + Add experience
+            </SecondaryButton>
+          </div>
+        </section>
+
+        {/* Projects */}
+        <section>
+          <SectionTitle title="Projects" hint="Add at least one." error={arrayError(errors.projects)} />
+          <div className="space-y-3">
+            {projects.fields.map((f, i) => {
+              const e = errors.projects?.[i];
+              return (
+                <SubCard key={f.id} title={`Project ${i + 1}`} onRemove={() => projects.remove(i)}>
+                  <Field label="Title" error={e?.title?.message} {...register(`projects.${i}.title`)} />
                   <Field
-                    label="End"
-                    type="month"
-                    disabled={current}
-                    error={current ? undefined : e?.end?.message}
-                    {...register(`experiences.${i}.end`)}
+                    label="Link (optional)"
+                    type="url"
+                    placeholder="https://github.com/…"
+                    error={e?.link?.message}
+                    {...register(`projects.${i}.link`)}
                   />
-                  <label className="mt-1.5 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                    <input type="checkbox" {...register(`experiences.${i}.current`)} /> I currently work here
-                  </label>
-                </div>
-                <Textarea
-                  label="What did you do?"
-                  rows={3}
-                  className="sm:col-span-2"
-                  placeholder="Key responsibilities and achievements"
-                  error={e?.description?.message}
-                  {...register(`experiences.${i}.description`)}
-                />
-              </SubCard>
-            );
-          })}
-          <SecondaryButton onClick={() => experiences.append(emptyExperience())} disabled={experiences.fields.length >= 20}>
-            + Add experience
-          </SecondaryButton>
-        </div>
-      </section>
-
-      {/* Projects */}
-      <section>
-        <SectionTitle title="Projects" hint="Add at least one." error={arrayError(errors.projects)} />
-        <div className="space-y-3">
-          {projects.fields.map((f, i) => {
-            const e = errors.projects?.[i];
-            return (
-              <SubCard key={f.id} title={`Project ${i + 1}`} onRemove={() => projects.remove(i)}>
-                <Field label="Title" error={e?.title?.message} {...register(`projects.${i}.title`)} />
-                <Field
-                  label="Link (optional)"
-                  type="url"
-                  placeholder="https://github.com/…"
-                  error={e?.link?.message}
-                  {...register(`projects.${i}.link`)}
-                />
-                <div className="sm:col-span-2">
-                  <Controller
-                    control={control}
-                    name={`projects.${i}.tech`}
-                    render={({ field }) => (
-                      <TagInput
-                        label="Tech used"
-                        value={field.value}
-                        onChange={field.onChange}
-                        max={20}
-                        placeholder="e.g. Next.js, FastAPI"
-                        error={e?.tech?.message}
-                      />
-                    )}
+                  <div className="sm:col-span-2">
+                    <Controller
+                      control={control}
+                      name={`projects.${i}.tech`}
+                      render={({ field }) => (
+                        <TagInput
+                          label="Tech used"
+                          value={field.value}
+                          onChange={field.onChange}
+                          max={20}
+                          placeholder="e.g. Next.js, FastAPI"
+                          error={e?.tech?.message}
+                        />
+                      )}
+                    />
+                  </div>
+                  <Textarea
+                    label="Description"
+                    rows={3}
+                    className="sm:col-span-2"
+                    placeholder="What it does and what you built"
+                    error={e?.description?.message}
+                    {...register(`projects.${i}.description`)}
                   />
-                </div>
-                <Textarea
-                  label="Description"
-                  rows={3}
-                  className="sm:col-span-2"
-                  placeholder="What it does and what you built"
-                  error={e?.description?.message}
-                  {...register(`projects.${i}.description`)}
-                />
-              </SubCard>
-            );
-          })}
-          <SecondaryButton onClick={() => projects.append(emptyProject())} disabled={projects.fields.length >= 20}>
-            + Add project
-          </SecondaryButton>
-        </div>
-      </section>
+                </SubCard>
+              );
+            })}
+            <SecondaryButton onClick={() => projects.append(emptyProject())} disabled={projects.fields.length >= 20}>
+              + Add project
+            </SecondaryButton>
+          </div>
+        </section>
 
-      {/* Education */}
-      <section>
-        <SectionTitle
-          title={experienced ? "Education (optional)" : "Education"}
-          hint={experienced ? undefined : "Add at least one."}
-          error={arrayError(errors.education)}
-        />
-        <div className="space-y-3">
-          {education.fields.map((f, i) => {
-            const e = errors.education?.[i];
-            return (
-              <SubCard key={f.id} title={`Education ${i + 1}`} onRemove={() => education.remove(i)}>
-                <Field label="Degree" placeholder="e.g. B.Tech, Computer Science" error={e?.degree?.message} {...register(`education.${i}.degree`)} />
-                <Field label="Institution" error={e?.institution?.message} {...register(`education.${i}.institution`)} />
-                <Field
-                  label="Graduation year"
-                  inputMode="numeric"
-                  maxLength={4}
-                  placeholder="e.g. 2024"
-                  error={e?.year?.message}
-                  {...register(`education.${i}.year`)}
-                />
-              </SubCard>
-            );
-          })}
-          <SecondaryButton onClick={() => education.append(emptyEducation())} disabled={education.fields.length >= 10}>
-            + Add education
-          </SecondaryButton>
-        </div>
-      </section>
+        {!fresher && educationSection}
+      </fieldset>
 
       {saved && <Alert tone="success">Details saved. You can now add the job description below.</Alert>}
       <Button type="submit" loading={isSubmitting} className="sm:w-auto! sm:px-6">
