@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // Hide the Next.js dev tools "N" button shown in the corner during `npm run dev`
+  devIndicators: false,
   experimental: {
     // /api/* is proxied to FastAPI; AI customization can take 30s+ (default proxy timeout is 30s).
     proxyTimeout: 180_000,
